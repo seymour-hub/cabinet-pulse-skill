@@ -67,7 +67,7 @@
 
 **Cabinet-Pulse** 采用“核心开源 + 插件隔离”架构。以下高级模块专为企业级深度场景提供：
 
-* **Deep-Infra Adapter**：针对 NVIDIA/Inspur GPU 算力集群拓扑的专用正则提取与监控逻辑。
+* **Deep-Infra Adapter**：针对 NVIDIA GPU 算力集群拓扑的专用正则提取与监控逻辑。
 * **Zero-Latency Logic-Gate**：高并发场景下的飞书限频冲突处理算法（Pro 专用）。
 * **PMM Insight Template**：针对部门汇报、决策支持生成的结构化日报动态模板。
 
