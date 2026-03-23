@@ -1,0 +1,97 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    
+    /* Type Checking */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    
+    /* JavaScript Support */
+    "allowJs": true,
+    "checkJs": true,
+    
+    /* Interop Constraints */
+    "esModuleInterop": true,
+    "allowUmdGlobalAccess": false,
+    "verbatimModuleSyntax": false,
+    "isolatedModules": true,
+    
+    /* Completeness */
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    
+    /* Emit */
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "removeComments": false,
+    "importsNotUsedAsValues": "remove",
+    "inlineSources": true,
+    "newLine": "lf",
+    
+    /* Advanced */
+    "noEmitOnError": true,
+    "preserveConstEnums": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    
+    /* Paths */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@core/*": ["src/core/*"],
+      "@adapters/*": ["src/adapters/*"],
+      "@agents/*": ["src/agents/*"],
+      "@monitor/*": ["src/monitor/*"],
+      "@utils/*": ["src/utils/*"],
+      "@config/*": ["config/*"]
+    }
+  },
+  
+  "include": [
+    "src/**/*",
+    "scripts/**/*",
+    "config/**/*",
+    "examples/**/*",
+    "tests/**/*"
+  ],
+  
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.mock.ts"
+  ],
+  
+  "ts-node": {
+    "transpileOnly": true,
+    "files": true,
+    "compilerOptions": {
+      "module": "commonjs"
+    }
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "name": "cabinet-pulse-skill",
+  "version": "1.0.0-alpha.0",
+  "description": "Zero-pressure memory reset system for multi-Agent collaboration in OpenClaw",
+  "author": "Seymour (mars) with OpenClaw AI Assistant",
+  "license": "MIT",
+  "created": "2026-03-23T17:40:00+0800",
+  "updated": "2026-03-23T17:40:00+0800",
+  "openclawVersion": ">=2026.3.11",
+  
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "cabinet-pulse": "./dist/scripts/cabinet-pulse.js"
+  },
+  
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "dev": "ts-node src/index.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build && npm test",
+    "archive": "node dist/scripts/cabinet-pulse.js archive",
+    "report": "node dist/scripts/cabinet-pulse.js report",
+    "clean": "node dist/scripts/cabinet-pulse.js cleanup"
+  },
+  
+  "dependencies": {
+    "sqlite3": "^5.1.7",
+    "better-sqlite3": "^11.0.0",
+    "cron": "^3.1.6",
+    "commander": "^12.0.0",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1",
+    "dayjs": "^1.11.10",
+    "uuid": "^9.0.0",
+    "zod": "^3.22.4"
+  },
+  
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.10.5",
+    "@types/sqlite3": "^3.1.11",
+    "@types/better-sqlite3": "^7.6.9",
+    "@types/cron": "^2.4.0",
+    "@types/uuid": "^9.0.8",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.10",
+    "ts-jest": "^29.1.1",
+    "eslint": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.2",
+    "@typescript-eslint/parser": "^6.13.2",
+    "prettier": "^3.1.0",
+    "@types/prettier": "^3.0.0"
+  },
+  
+  "files": [
+    "dist/",
+    "SKILL.md",
+    "README.md",
+    "LICENSE",
+    "config/",
+    "examples/",
+    "scripts/",
+    "templates/"
+  ],
+  
+  "capabilities": [
+    "multi-agent-collaboration",
+    "memory-management",
+    "context-archival",
+    "automated-scheduling",
+    "system-monitoring",
+    "data-persistence",
+    "encryption-security"
+  ],
+  
+  "keywords": [
+    "openclaw",
+    "skill",
+    "agent",
+    "memory",
+    "context",
+    "archive",
+    "automation",
+    "monitoring",
+    "cabinet-pulse",
+    "multi-agent"
+  ],
+  
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seymour-hub/cabinet-pulse-skill.git"
+  },
+  
+  "bugs": {
+    "url": "https://github.com/seymour-hub/cabinet-pulse-skill/issues"
+  },
+  
+  "homepage": "https://github.com/seymour-hub/cabinet-pulse-skill#readme",
+  
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
