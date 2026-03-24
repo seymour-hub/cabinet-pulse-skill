@@ -1,0 +1,44 @@
+{
+  "storage": {
+    "connectionString": "sqlite:///data/cabinet-pulse.db",
+    "adapterType": "sqlite"
+  },
+  "agents": {
+    "defaultAgentConfig": {
+      "retentionDays": 30,
+      "contextSizeLimit": 8192,
+      "compressionEnabled": true,
+      "summaryEnabled": true,
+      "encryptionEnabled": false,
+      "dependencies": [],
+      "notificationSettings": {
+        "onSuccess": false,
+        "onFailure": true,
+        "onWarning": true,
+        "dailyReport": false,
+        "channels": []
+      },
+      "scheduleEnabled": false,
+      "version": "1.0.0",
+      "createdBy": "system",
+      "lastModifiedBy": "system",
+      "isActive": true
+    }
+  },
+  "autoArchive": {
+    "enabled": true,
+    "retentionDays": 30,
+    "schedule": "0 2 * * *"  // 每天凌晨2点执行
+  },
+  "logging": {
+    "level": "info",
+    "file": "logs/cabinet-pulse.log",
+    "maxSize": "10MB",
+    "maxFiles": 5
+  },
+  "security": {
+    "encryptionKey": "auto-generated-or-custom-key",
+    "accessToken": "auto-generated-or-custom-token",
+    "allowedOrigins": ["http://localhost:3000"]
+  }
+}

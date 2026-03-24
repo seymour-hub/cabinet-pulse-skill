@@ -18,6 +18,9 @@ export * from './system-metrics';
 // 日报相关类型
 export * from './daily-report';
 
+// 存储适配器接口
+export * from './storage-adapter';
+
 /**
  * 通用类型定义
  */
@@ -33,6 +36,9 @@ export interface StorageResult<T = any> {
     operationTime: number;
     affectedRows?: number;
     queryTime?: number;
+    totalCount?: number;
+    limit?: number;
+    offset?: number;
   };
 }
 

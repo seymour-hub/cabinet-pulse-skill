@@ -61,11 +61,11 @@ module.exports = {
   verbose: true,
   silent: false,
   
-  // Watch options
-  watchPlugins: [
-    'jest-watch-typeahead/filename',
-    'jest-watch-typeahead/testname'
-  ],
+  // Watch options (temporarily disabled due to dependency issues)
+  // watchPlugins: [
+  //   'jest-watch-typeahead/filename',
+  //   'jest-watch-typeahead/testname'
+  // ],
   
   // Clear mocks
   clearMocks: true,
