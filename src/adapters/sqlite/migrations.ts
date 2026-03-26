@@ -390,13 +390,21 @@ export class MigrationManager {
    */
   private applyMigration(migration: Migration): boolean {
     const startTime = Date.now();
+    let transactionStarted = false;
     
     try {
-      // 检查是否已应用
-      const checkStmt = this.db.prepare(
-        `SELECT 1 FROM ${TABLES.MIGRATION_HISTORY} WHERE migration_name = ? AND success = TRUE`
-      );
-      const alreadyApplied = checkStmt.get(migration.name);
+      // 检查是否已应用（如果迁移历史表不存在，认为未应用）
+      let alreadyApplied = false;
+      try {
+        const checkStmt = this.db.prepare(
+          `SELECT 1 FROM ${TABLES.MIGRATION_HISTORY} WHERE migration_name = ? AND success = TRUE`
+        );
+        alreadyApplied = !!checkStmt.get(migration.name);
+      } catch (checkError) {
+        // 表可能不存在，认为迁移未应用
+        console.log(`Migration history table may not exist, assuming migration ${migration.name} not applied`);
+        alreadyApplied = false;
+      }
       
       if (alreadyApplied) {
         console.log(`Migration ${migration.name} already applied, skipping`);
@@ -404,26 +412,54 @@ export class MigrationManager {
       }
       
       // 在事务中执行迁移
+      console.log(`Beginning transaction for migration ${migration.name}`);
       this.db.exec('BEGIN TRANSACTION');
+      transactionStarted = true;
       
       console.log(`Applying migration: ${migration.name} (v${migration.version})`);
       migration.up(this.db);
       
       const executionTime = Date.now() - startTime;
+      
+      // 记录迁移（此时表应该已存在）
       this.recordMigration(migration, true, executionTime);
       
       this.db.exec('COMMIT');
+      transactionStarted = false;
       console.log(`Migration ${migration.name} applied successfully (${executionTime}ms)`);
       
       return true;
     } catch (error) {
-      this.db.exec('ROLLBACK');
+      // 只有在事务已开始时才回滚
+      if (transactionStarted) {
+        try {
+          console.log(`Rolling back transaction for failed migration ${migration.name}`);
+          this.db.exec('ROLLBACK');
+        } catch (rollbackError) {
+          console.error(`Failed to rollback transaction for migration ${migration.name}:`, rollbackError);
+        }
+      }
       
       const executionTime = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
       
-      console.error(`Failed to apply migration ${migration.name}:`, errorMessage);
-      this.recordMigration(migration, false, executionTime, errorMessage);
+      console.error(`Failed to apply migration ${migration.name}:`, error);
+      console.error(`Error details:`, {
+        message: errorMessage,
+        stack: error instanceof Error ? error.stack : 'No stack',
+        migrationName: migration.name,
+        migrationVersion: migration.version,
+        transactionStarted,
+      });
+      
+      // 尝试记录错误，但可能因为表不存在而失败
+      try {
+        this.recordMigration(migration, false, executionTime, errorMessage);
+      } catch (recordError) {
+        console.error('Failed to record migration error:', recordError);
+        // 如果记录失败，可能是因为迁移历史表不存在（对于第一个迁移）
+        // 这种情况下，我们可以继续，因为迁移失败了，但我们无法记录
+      }
       
       return false;
     }

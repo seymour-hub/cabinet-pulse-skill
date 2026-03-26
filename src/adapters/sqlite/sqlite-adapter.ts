@@ -78,14 +78,24 @@ export class SQLiteAdapter {
    * 从连接字符串提取数据库路径
    */
   private extractDatabasePath(connectionString: string): string {
-    // SQLite连接字符串格式: sqlite:///path/to/database.db
-    // 或直接是文件路径
-    if (connectionString.startsWith('sqlite:///')) {
-      return connectionString.replace('sqlite:///', '');
+    // SQLite连接字符串格式处理
+    // 1. sqlite:///path/to/database.db -> /path/to/database.db
+    // 2. sqlite://:memory: -> :memory: (内存数据库)
+    // 3. sqlite:path/to/db -> path/to/db
+    // 4. 直接路径 -> 原样返回
+    
+    // 移除sqlite://前缀
+    if (connectionString.startsWith('sqlite://')) {
+      const pathPart = connectionString.substring('sqlite://'.length);
+      // 如果以/开头，是文件路径，否则可能是特殊标识符如:memory:
+      return pathPart;
     }
+    
+    // 移除sqlite:前缀
     if (connectionString.startsWith('sqlite:')) {
-      return connectionString.replace('sqlite:', '');
+      return connectionString.substring('sqlite:'.length);
     }
+    
     return connectionString;
   }
   
@@ -134,11 +144,35 @@ export class SQLiteAdapter {
    */
   async connect(): Promise<StorageResult<boolean>> {
     try {
-      // 动态导入better-sqlite3
-      const sqlite3 = await import('better-sqlite3');
-      const Database = (sqlite3 as any).default || sqlite3;
+      console.log(`Connecting to SQLite database: ${this.config.databasePath}`);
+      console.log(`Config:`, JSON.stringify({
+        databasePath: this.config.databasePath,
+        readonly: this.config.readonly,
+        timeout: this.config.timeout,
+      }, null, 2));
+      
+      // 使用require加载better-sqlite3（Jest环境中动态import可能有问题）
+      let Database;
+      try {
+        // 尝试CommonJS require
+        const sqlite3 = require('better-sqlite3');
+        Database = sqlite3.default || sqlite3;
+        console.log('better-sqlite3 module loaded via require');
+      } catch (requireError) {
+        console.error('Failed to require better-sqlite3:', requireError);
+        // 回退到动态import
+        try {
+          const sqlite3 = await import('better-sqlite3');
+          Database = (sqlite3 as any).default || sqlite3;
+          console.log('better-sqlite3 module loaded via dynamic import');
+        } catch (importError) {
+          console.error('Both require and import failed:', importError);
+          throw new Error(`better-sqlite3 module load failed: ${importError}`);
+        }
+      }
       
       // 打开数据库连接
+      console.log('Creating Database instance...');
       this.db = new Database(
         this.config.databasePath,
         {
@@ -147,6 +181,7 @@ export class SQLiteAdapter {
           verbose: this.config.verbose ? console.log : undefined,
         }
       ) as Database;
+      console.log('Database instance created');
       
       // 配置数据库参数
       this.db.pragma(`journal_mode = ${this.config.journalMode}`);
@@ -207,6 +242,8 @@ export class SQLiteAdapter {
       };
     } catch (error) {
       console.error('Failed to connect to SQLite database:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+      console.error('Error code:', (error as any).code || 'UNKNOWN');
       this.db = null;
       
       // 更新状态
@@ -221,6 +258,11 @@ export class SQLiteAdapter {
         error: error instanceof Error ? error.message : String(error),
         metadata: {
           operationTime: Date.now(),
+          errorDetails: {
+            message: error instanceof Error ? error.message : String(error),
+            code: (error as any).code || 'UNKNOWN',
+            databasePath: this.config.databasePath,
+          },
         },
       };
     }

@@ -39,6 +39,7 @@ export interface StorageResult<T = any> {
     totalCount?: number;
     limit?: number;
     offset?: number;
+    [key: string]: any; // 允许扩展字段
   };
 }
 

@@ -9,6 +9,7 @@ import {
   StorageAdapterConfig
 } from '../types';
 import { SQLiteSimplifiedAdapter } from '../adapters/sqlite/sqlite-simplified-adapter';
+import { BasicContextCompressor, IContextCompressor, CompressionStrategy } from './context-compressor';
 
 /**
  * Agent管理器配置
@@ -28,6 +29,10 @@ export interface AgentManagerConfig {
   archiveRetentionDays?: number;
   /** 日志级别 */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  /** 压缩策略配置 */
+  compressionStrategy?: Partial<CompressionStrategy>;
+  /** 自定义压缩器实例（可选） */
+  compressor?: IContextCompressor;
 }
 
 /**
@@ -69,6 +74,7 @@ export class AgentManager {
   private agents: Map<string, AgentConfig> = new Map();
   private logger: Console = console;
   private initialized: boolean = false;
+  private compressor: IContextCompressor | null = null;
 
   constructor(config: AgentManagerConfig) {
     this.config = {
@@ -77,6 +83,13 @@ export class AgentManager {
       autoArchive: true,
       archiveRetentionDays: 30,
       logLevel: 'info',
+      compressionStrategy: {
+        minCompressionRatio: 0.3,
+        maxContextSize: 10000,
+        enableAIEnhancement: false,
+        keepOriginalReference: true,
+        importanceThreshold: 60,
+      },
       defaultAgentConfig: {
         retentionDays: 30,
         contextSizeLimit: 8192,
@@ -102,6 +115,15 @@ export class AgentManager {
     
     // 配置日志级别
     this.setupLogger();
+    
+    // 初始化压缩器（如果未提供自定义压缩器）
+    if (this.config.compressor) {
+      this.compressor = this.config.compressor;
+      this.logger.debug('使用自定义上下文压缩器');
+    } else if (this.config.autoCompression) {
+      this.compressor = new BasicContextCompressor(this.config.compressionStrategy, this.logger);
+      this.logger.debug('初始化基础上下文压缩器');
+    }
   }
 
   /**
@@ -627,7 +649,7 @@ export class AgentManager {
       const config = agentResult.data;
       
       // 获取资产统计
-      const assetsResult = await this.getAssets(agentId, { limit: 1 });
+      const assetsResult = await this.getAssets(agentId);
       const assetCount = assetsResult.success && assetsResult.data ? assetsResult.data.length : 0;
       
       // 构建状态信息
@@ -696,6 +718,336 @@ export class AgentManager {
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       this.logger.error('Failed to archive old assets:', errMsg);
+      return {
+        success: false,
+        error: errMsg,
+        metadata: {
+          operationTime: Date.now(),
+        },
+      };
+    }
+  }
+
+  /**
+   * 压缩并归档上下文
+   * @param agentId Agent ID
+   * @param context 上下文内容
+   * @param options 压缩选项
+   */
+  async compressAndArchiveContext(
+    agentId: string,
+    context: string,
+    options?: {
+      forceCompression?: boolean;
+      strategy?: Partial<CompressionStrategy>;
+      metadata?: Record<string, any>;
+    }
+  ): Promise<StorageResult<AgentAsset>> {
+    try {
+      if (!this.initialized) {
+        throw new Error('Agent Manager not initialized');
+      }
+      
+      if (!this.compressor) {
+        throw new Error('Context compressor not available. Enable autoCompression or provide a compressor.');
+      }
+      
+      if (!this.storageAdapter) {
+        throw new Error('Storage adapter not initialized');
+      }
+      
+      this.logger.info(`Compressing context for agent ${agentId}, size: ${context.length} characters`);
+      
+      // 检查是否需要压缩
+      const shouldCompress = options?.forceCompression || 
+        (this.config.autoCompression && context.length > (this.config.contextSizeLimit || 8192));
+      
+      if (!shouldCompress) {
+        this.logger.debug(`Context size below limit, skipping compression for agent ${agentId}`);
+        return {
+          success: false,
+          error: 'Context size below compression threshold',
+          metadata: {
+            operationTime: Date.now(),
+            contextSize: context.length,
+            threshold: this.config.contextSizeLimit || 8192,
+          },
+        };
+      }
+      
+      // 压缩上下文
+      const compressionResult = await this.compressor.compressContext(
+        context,
+        agentId,
+        options?.strategy || this.config.compressionStrategy
+      );
+      
+      if (!compressionResult.success || !compressionResult.asset) {
+        return {
+          success: false,
+          error: compressionResult.error || 'Compression failed',
+          metadata: {
+            operationTime: Date.now(),
+            compressionResult: compressionResult.metadata,
+          },
+        };
+      }
+      
+      // 保存资产到存储
+      const asset = compressionResult.asset;
+      const saveResult = await this.storageAdapter.createAgentAsset(asset);
+      
+      if (!saveResult.success) {
+        this.logger.error(`Failed to save compressed asset for agent ${agentId}:`, saveResult.error);
+        return saveResult;
+      }
+      
+      this.logger.info(`Context compressed and archived for agent ${agentId}, asset ID: ${asset.id}`);
+      
+      return {
+        success: true,
+        data: asset,
+        metadata: {
+          operationTime: Date.now(),
+          originalSize: context.length,
+          compressedSize: asset.content.length,
+          compressionRatio: asset.content.length / context.length,
+          analysis: compressionResult.analysis,
+        },
+      };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to compress and archive context for agent ${agentId}:`, errMsg);
+      return {
+        success: false,
+        error: errMsg,
+        metadata: {
+          operationTime: Date.now(),
+        },
+      };
+    }
+  }
+  
+  /**
+   * 监控所有Agent的上下文并自动压缩
+   * @param contextMap Agent上下文映射 {agentId: context}
+   */
+  async monitorAndCompressContexts(
+    contextMap: Record<string, { context: string; metadata?: Record<string, any> }>
+  ): Promise<{
+    total: number;
+    compressed: number;
+    skipped: number;
+    failed: number;
+    results: Record<string, StorageResult<AgentAsset>>;
+  }> {
+    const results: Record<string, StorageResult<AgentAsset>> = {};
+    let compressed = 0;
+    let skipped = 0;
+    let failed = 0;
+    
+    for (const [agentId, data] of Object.entries(contextMap)) {
+      try {
+        // 检查Agent是否存在
+        const agentResult = await this.getAgent(agentId);
+        if (!agentResult.success || !agentResult.data) {
+          this.logger.warn(`Agent ${agentId} not found, skipping context compression`);
+          results[agentId] = {
+            success: false,
+            error: `Agent ${agentId} not found`,
+          };
+          failed++;
+          continue;
+        }
+        
+        // 检查Agent是否启用压缩
+        const agentConfig = agentResult.data;
+        if (!agentConfig.compressionEnabled && !this.config.autoCompression) {
+          this.logger.debug(`Compression disabled for agent ${agentId}, skipping`);
+          results[agentId] = {
+            success: false,
+            error: 'Compression disabled for agent',
+          };
+          skipped++;
+          continue;
+        }
+        
+        // 压缩上下文
+        const compressResult = await this.compressAndArchiveContext(
+          agentId,
+          data.context,
+          data.metadata ? { metadata: data.metadata } : undefined
+        );
+        
+        results[agentId] = compressResult;
+        
+        if (compressResult.success) {
+          compressed++;
+          this.logger.debug(`Context compressed for agent ${agentId}`);
+        } else if (compressResult.error?.includes('below compression threshold')) {
+          skipped++;
+        } else {
+          failed++;
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Error processing context for agent ${agentId}:`, errMsg);
+        results[agentId] = {
+          success: false,
+          error: errMsg,
+        };
+        failed++;
+      }
+    }
+    
+    this.logger.info(`Context monitoring completed: ${compressed} compressed, ${skipped} skipped, ${failed} failed out of ${Object.keys(contextMap).length} agents`);
+    
+    return {
+      total: Object.keys(contextMap).length,
+      compressed,
+      skipped,
+      failed,
+      results,
+    };
+  }
+  
+  /**
+   * 获取上下文统计信息
+   */
+  async getContextStatistics(): Promise<StorageResult<{
+    agentCount: number;
+    agentsWithCompressionEnabled: number;
+    totalContextSizeLimit: number;
+    averageContextSizeLimit: number;
+    compressionStats: {
+      totalCompressions: number;
+      successfulCompressions: number;
+      averageCompressionRatio: number;
+      totalBytesSaved: number;
+    };
+    storageStats: {
+      totalAssets: number;
+      assetsByType: Record<string, number>;
+      totalStorageUsed: number;
+    };
+  }>> {
+    try {
+      if (!this.initialized) {
+        throw new Error('Agent Manager not initialized');
+      }
+      
+      // 获取所有Agent
+      const agentsResult = await this.getAllAgents();
+      if (!agentsResult.success || !agentsResult.data) {
+        return agentsResult as any;
+      }
+      
+      const agents = agentsResult.data;
+      const agentsWithCompressionEnabled = agents.filter(a => a.compressionEnabled).length;
+      
+      // 获取资产统计（简化实现）
+      // TODO: 实现从存储适配器获取实际统计
+      const storageStats = {
+        totalAssets: 0,
+        assetsByType: {} as Record<string, number>,
+        totalStorageUsed: 0,
+      };
+      
+      // 计算上下文大小限制统计
+      const contextLimits = agents.map(a => a.contextSizeLimit || this.config.contextSizeLimit || 8192);
+      const totalContextSizeLimit = contextLimits.reduce((sum, limit) => sum + limit, 0);
+      const averageContextSizeLimit = agents.length > 0 ? totalContextSizeLimit / agents.length : 0;
+      
+      // 压缩统计（简化实现）
+      // TODO: 从执行日志中获取实际压缩统计
+      const compressionStats = {
+        totalCompressions: 0,
+        successfulCompressions: 0,
+        averageCompressionRatio: 0.7, // 默认值
+        totalBytesSaved: 0,
+      };
+      
+      return {
+        success: true,
+        data: {
+          agentCount: agents.length,
+          agentsWithCompressionEnabled,
+          totalContextSizeLimit,
+          averageContextSizeLimit,
+          compressionStats,
+          storageStats,
+        },
+        metadata: {
+          operationTime: Date.now(),
+        },
+      };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to get context statistics:', errMsg);
+      return {
+        success: false,
+        error: errMsg,
+        metadata: {
+          operationTime: Date.now(),
+        },
+      };
+    }
+  }
+  
+  /**
+   * 运行自动归档（监控并压缩所有过大的上下文）
+   */
+  async runAutoArchive(): Promise<StorageResult<{
+    monitored: number;
+    compressed: number;
+    skipped: number;
+    failed: number;
+  }>> {
+    try {
+      if (!this.initialized) {
+        throw new Error('Agent Manager not initialized');
+      }
+      
+      if (!this.config.autoArchive) {
+        this.logger.info('Auto archive is disabled, skipping');
+        return {
+          success: true,
+          data: {
+            monitored: 0,
+            compressed: 0,
+            skipped: 0,
+            failed: 0,
+          },
+          metadata: {
+            operationTime: Date.now(),
+            reason: 'autoArchive disabled',
+          },
+        };
+      }
+      
+      this.logger.info('Running auto archive...');
+      
+      // 注意：这个方法需要外部提供上下文数据
+      // 在实际使用中，需要从OpenClaw运行时获取Agent上下文
+      // 这里返回一个占位结果
+      this.logger.warn('Auto archive requires external context data. Please use monitorAndCompressContexts with actual context data.');
+      
+      return {
+        success: true,
+        data: {
+          monitored: 0,
+          compressed: 0,
+          skipped: 0,
+          failed: 0,
+        },
+        metadata: {
+          operationTime: Date.now(),
+          note: 'Auto archive requires external context data input',
+        },
+      };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to run auto archive:', errMsg);
       return {
         success: false,
         error: errMsg,

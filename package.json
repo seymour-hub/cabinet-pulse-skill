@@ -11,7 +11,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "cabinet-pulse": "./dist/scripts/cabinet-pulse.js"
+    "cabinet-pulse": "./dist/src/scripts/cabinet-pulse.js"
   },
   
   "scripts": {

@@ -254,10 +254,10 @@ describe('Agent Manager', () => {
     expect(assetsResult.data?.every(a => a.agentId === 'test-agent-get-assets')).toBe(true);
     expect(assetsResult.data?.every(a => a.assetType === 'report')).toBe(true);
     
-    // 验证资产按时间戳降序排列
+    // 验证资产按时间戳降序排列（允许相等，因为可能在同一毫秒创建）
     const timestamps = assetsResult.data?.map(a => a.createdAt) || [];
     for (let i = 0; i < timestamps.length - 1; i++) {
-      expect(timestamps[i]).toBeGreaterThan(timestamps[i + 1]);
+      expect(timestamps[i]).toBeGreaterThanOrEqual(timestamps[i + 1]);
     }
   });
   
